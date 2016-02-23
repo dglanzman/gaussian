@@ -1,7 +1,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+#include <time.h>
 
+// writes a 2D gaussian distribution to the provided buffer
+// sigma is standard deviation in pixels, distribution is normalized
 int gaussian(double ** buffer, double sigma) {
     int size = round(6 * sigma);
     if (size % 2 == 0) size++;
@@ -20,66 +23,46 @@ int gaussian(double ** buffer, double sigma) {
     return size;
 }
 
-int print_kernel() {
-    double * kernel;
-    int size = gaussian(&kernel, 5);
-    printf("P6 %u %u %u\n", size, size, 255);
-    for (int i = 0; i < size * size; i++) {
-        putchar(round(255 * kernel[i]));
-        putchar(round(255 * kernel[i]));
-        putchar(round(255 * kernel[i]));
-    }
-    return 0;
-}
-
+// clamps i to [0, ceil)
 int clamp(int i, int ceil) {
     if (i >= ceil) return ceil - 1;
     if (i < 0) return 0;
     return i;
 }
 
-struct pixel_data {
-    int x;
-    int y;
-    int x_max;
-    int y_max;
-    char * image;
+int main() {
+    int w, h;
     double * kernel;
-    int k_size;
-    char * out;
-};
-
-void pixel(struct pixel_data * p) {
-    double pixel[3] = {0, 0, 0};
-    for (int ky = 0; ky < p->k_size; ky++) {
-        for (int kx = 0; kx < p->k_size; kx++) {
-            int ix = clamp(kx - p->x, p->x_max);
-            int iy = clamp(ky - p->y, p->y_max);
-            int k_id = ky * p->k_size + kx;
-            int img_id = (iy * p->x_max + ix) * 3;
+    double pixel[3] = {0};
+    scanf("P6 %u %u %*u\n", &w, &h);
+    printf("P6\n%u %u\n255\n", w, h);
+    unsigned char * image = malloc(3 * w * h);
+    unsigned char * out = malloc(3 * w * h);
+    fread(image, 3, w * h, stdin);
+    int k_size = gaussian(&kernel, 1.5);
+    clock_t start = clock();
+    for (int y = 0; y < h; y++)
+    for (int x = 0; x < w; x++) {
+        for (int ky = 0; ky < k_size; ky++) 
+        for (int kx = 0; kx < k_size; kx++) {
+            int ix = clamp(x + kx - k_size / 2, w);
+            int iy = clamp(y + ky - k_size / 2, h);
+            int k_id = ky * k_size + kx;
+            int img_id = (iy * w + ix) * 3;
             for (int i = 0; i < 3; i++) {
-                pixel[i] += p->kernel[k_id] * p->image[img_id + i];
+                pixel[i] += kernel[k_id] * image[img_id + i];
             }
         }
-    }
-    for (int i = 0; i < 3; i++) {
-        p->out[(p->y * p->x_max + p->x) * 3 + i] = round(pixel[i]);
-    }
-}
-
-int main() {
-    struct pixel_data p;
-    scanf("P6 %u %u %*u\n", &(p.x_max), &(p.y_max));
-    printf("P6\n%u %u\n255\n", p.x_max, p.y_max);
-    p.image = malloc(3 * p.x_max * p.y_max);
-    p.out = malloc(3 * p.x_max * p.y_max);
-    fread(p.image, 3, p.x_max * p.y_max, stdin);
-    p.k_size = gaussian(&(p.kernel), 3);
-    for (p.y = 0; p.y < p.y_max; p.y++) {
-        for (p.x = 0; p.x < p.x_max; p.x++) {
-            pixel(&p);
+        for (int i = 0; i < 3; i++) {
+            out[(y * w + x) * 3 + i] = round(pixel[i]);
+            pixel[i] = 0;
         }
     }
-    fwrite(p.out, 3, p.x_max * p.y_max, stdout);
+    clock_t end = clock();
+    fwrite(out, 3, w * h, stdout);
+    fprintf(stderr, "Time = %lums\n", (end - start) / 1000);
+    free(image);
+    free(out);
+    free(kernel);
     return 0;
 }
